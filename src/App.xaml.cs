@@ -11,15 +11,20 @@ namespace FluidSim
 {
     public partial class App : Application
     {
+        public static bool FullScreenMode { get; private set; } = false;
         static Mutex _mutex;
 
         protected override void OnStartup(StartupEventArgs e)
         {
             AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
 
+            if (e.Args != null && e.Args.Length > 0)
+            {
+                FullScreenMode = e.Args.Any(arg => string.Equals(arg, "-fullscreen", StringComparison.OrdinalIgnoreCase));
+            }
+
             //if (System.Diagnostics.Process.GetProcessesByName(System.IO.Path.GetFileNameWithoutExtension(System.Reflection.Assembly.GetEntryAssembly().Location)).Count() > 1)
             //    App.Current.Shutdown();
-
             bool isNewInstance = false;
             _mutex = new Mutex(true, "FluidSimByTheGuild", out isNewInstance);
             if (!isNewInstance)

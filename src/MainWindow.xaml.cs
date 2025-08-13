@@ -59,6 +59,7 @@ namespace FluidSim
             vsw = ValueStopwatch.StartNew();
             InitializeComponent();
             //CompositionTarget.Rendering += UpdateFrame;
+            fullScreenMode = App.FullScreenMode;
 
             this.KeyDown += (s, e) =>
             {
@@ -91,7 +92,8 @@ namespace FluidSim
                 {
                     N = 40; // go easy on the CPU
                     dt = 0.02f;
-                    temperatureDecay = 0.75f;
+                    viscosity = 0.011f;
+                    temperatureDecay = 0.6f;
                     this.Topmost = true;
                 }
             }
