@@ -1,0 +1,232 @@
+﻿<Window
+    x:Class="FluidSim.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:FluidSim"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="FluidSim"
+    Width="860"
+    Height="620"
+    Background="#141414"
+    Closing="Window_Closing"
+    Icon="/FluidSim;component/AppIcon.ico"
+    Loaded="Window_Loaded"
+    WindowStartupLocation="CenterScreen"
+    WindowState="Normal"
+    WindowStyle="SingleBorderWindow"
+    mc:Ignorable="d">
+
+    <!--#region [Control for Original Version]-->
+    <!--
+    <Grid>
+        <Image
+            x:Name="SimImage"
+            MouseDown="SimImage_MouseDown"
+            MouseMove="SimImage_MouseMove"
+            MouseUp="SimImage_MouseUp"
+            Stretch="Fill" />
+    </Grid>
+    -->
+    <!--#endregion-->
+
+    <Grid x:Name="mainGrid">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="300" />
+        </Grid.ColumnDefinitions>
+
+
+        <!--#region [Display]-->
+
+        <Border
+            Grid.Column="0"
+            Margin="-20,-30,-10,-30"
+            Background="Black"
+            BorderBrush="DodgerBlue"
+            BorderThickness="0">
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled">
+                <Viewbox
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    RenderOptions.BitmapScalingMode="Fant"
+                    Stretch="Uniform">
+                    <Image
+                        x:Name="SimImage"
+                        RenderOptions.BitmapScalingMode="Fant"
+                        SnapsToDevicePixels="True"
+                        Stretch="Uniform" />
+                </Viewbox>
+            </ScrollViewer>
+        </Border>
+        <!--#endregion-->
+
+        <!--#region [Controls]-->
+        <StackPanel
+            x:Name="ControlPanel"
+            Grid.Column="1"
+            Margin="10"
+            Background="#111"
+            Opacity="0.95">
+            <TextBlock
+                Margin="6"
+                FontWeight="Bold"
+                Foreground="White"
+                Text="Fire/Fluid Simulator" />
+            <Separator />
+
+            <StackPanel Margin="6,8,6,0" Orientation="Horizontal">
+                <TextBlock Foreground="White">Grid size</TextBlock>
+                <TextBlock
+                    Margin="10,0,0,0"
+                    VerticalAlignment="Bottom"
+                    FontSize="12"
+                    Foreground="White"
+                    Text="{Binding ElementName=SliderGrid, Path=Value, StringFormat=F0}" />
+            </StackPanel>
+            <Slider
+                x:Name="SliderGrid"
+                Margin="6"
+                IsSnapToTickEnabled="False"
+                Maximum="512"
+                Minimum="32"
+                TickFrequency="8"
+                ToolTip="resolution of the simulation"
+                Value="128" />
+
+            <StackPanel Margin="6,8,6,0" Orientation="Horizontal">
+                <TextBlock Foreground="White">Timestep</TextBlock>
+                <TextBlock
+                    Margin="10,0,0,0"
+                    VerticalAlignment="Bottom"
+                    FontSize="12"
+                    Foreground="White"
+                    Text="{Binding ElementName=SliderDt, Path=Value, StringFormat=F2}"
+                    ToolTip="aging of the particles" />
+            </StackPanel>
+            <Slider
+                x:Name="SliderDt"
+                Margin="6"
+                Maximum="1.0"
+                Minimum="0.01"
+                TickFrequency="0.01"
+                Value="0.08" />
+
+            <StackPanel Margin="6,8,6,0" Orientation="Horizontal">
+                <TextBlock Foreground="White">Viscosity</TextBlock>
+                <TextBlock
+                    Margin="10,0,0,0"
+                    VerticalAlignment="Bottom"
+                    FontSize="12"
+                    Foreground="White"
+                    Text="{Binding ElementName=SliderVisc, Path=Value, StringFormat=F4}" />
+            </StackPanel>
+            <Slider
+                x:Name="SliderVisc"
+                Margin="6"
+                Maximum="0.5"
+                Minimum="0"
+                TickFrequency="0.0005"
+                ToolTip="how thick the surrounding air is"
+                Value="0.04" />
+
+            <StackPanel Margin="6,8,6,0" Orientation="Horizontal">
+                <TextBlock Foreground="White">Diffusion (density)</TextBlock>
+                <TextBlock
+                    Margin="10,0,0,0"
+                    VerticalAlignment="Bottom"
+                    FontSize="12"
+                    Foreground="White"
+                    Text="{Binding ElementName=SliderDiff, Path=Value, StringFormat=F4}" />
+            </StackPanel>
+            <Slider
+                x:Name="SliderDiff"
+                Margin="6"
+                Maximum="0.1"
+                Minimum="0"
+                TickFrequency="0.0005"
+                ToolTip="diffusion of the particles"
+                Value="0.0001" />
+
+            <StackPanel Margin="6,8,6,0" Orientation="Horizontal">
+                <TextBlock Foreground="White">Buoyancy</TextBlock>
+                <TextBlock
+                    Margin="10,0,0,0"
+                    VerticalAlignment="Bottom"
+                    FontSize="12"
+                    Foreground="White"
+                    Text="{Binding ElementName=SliderBuoy, Path=Value, StringFormat=F1}" />
+            </StackPanel>
+            <Slider
+                x:Name="SliderBuoy"
+                Margin="6"
+                Maximum="5"
+                Minimum="0"
+                TickFrequency="0.1"
+                ToolTip="similar to gravity"
+                Value="0.1" />
+
+            <StackPanel Margin="6,8,6,0" Orientation="Horizontal">
+                <TextBlock Foreground="White">Injection Strength</TextBlock>
+                <TextBlock
+                    Margin="10,0,0,0"
+                    VerticalAlignment="Bottom"
+                    FontSize="12"
+                    Foreground="White"
+                    Text="{Binding ElementName=SliderInject, Path=Value, StringFormat=F0}" />
+            </StackPanel>
+            <Slider
+                x:Name="SliderInject"
+                Margin="6"
+                Maximum="500"
+                Minimum="10"
+                ToolTip="how much force is applied during additions"
+                Value="300" />
+
+            <StackPanel Margin="6,8,6,0" Orientation="Horizontal">
+                <TextBlock Foreground="White">Temperature Decay</TextBlock>
+                <TextBlock
+                    Margin="10,0,0,0"
+                    VerticalAlignment="Bottom"
+                    FontSize="12"
+                    Foreground="White"
+                    Text="{Binding ElementName=SliderDecay, Path=Value, StringFormat=F2}" />
+            </StackPanel>
+            <Slider
+                x:Name="SliderDecay"
+                Margin="6"
+                Maximum="1.0"
+                Minimum="0.0"
+                TickFrequency="0.01"
+                ToolTip="cooling rate of the particles"
+                Value="0.09" />
+
+            <StackPanel Margin="6,1,6,1" Orientation="Horizontal">
+                <Button
+                    x:Name="BtnPause"
+                    Width="80"
+                    Margin="0,6,6,6"
+                    Click="BtnPause_Click"
+                    Content="Pause"
+                    Template="{StaticResource ReformedButton}" />
+                <Button
+                    x:Name="BtnReset"
+                    Width="80"
+                    Margin="0,6,6,6"
+                    Click="BtnReset_Click"
+                    Content="Reset"
+                    Template="{StaticResource ReformedButton}" />
+            </StackPanel>
+
+            <TextBlock Margin="6,0,6,0" Foreground="White">Click &amp; drag on image to inject</TextBlock>
+            <TextBlock
+                x:Name="StatusText"
+                Margin="6,5,6,0"
+                Foreground="LightGray"
+                Text="Status: Running"
+                TextWrapping="Wrap" />
+        </StackPanel>
+        <!--#endregion-->
+
+    </Grid>
+</Window>
