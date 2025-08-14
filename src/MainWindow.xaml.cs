@@ -2,11 +2,13 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -16,6 +18,7 @@ namespace FluidSim
 {
     public partial class MainWindow : Window
     {
+        #region [Local Members]
         // Simulation parameters
         int N = 100;                // grid size/resolution (always square)
         float dt = 0.08f;           // timestep
@@ -24,6 +27,8 @@ namespace FluidSim
         float buoyancy = 0.1f; // Fall from top => buoyancy=2.5f;
         float injectStrength = 300f;
         float temperatureDecay = 0.09f;
+        double gammaCorrection = 0.7d;
+        bool addSmokeSource = false;
 
         // Grid arrays: sized (N+2) * (N+2) to allow boundaries.
         int size; // (N+2)
@@ -31,11 +36,12 @@ namespace FluidSim
         float[] dens, densPrev;
         float[] temp, tempPrev;
 
-        // Rendering
+        // Pixel rendering
         WriteableBitmap bmp;
         int bmpWidth, bmpHeight;
         int stride;
         byte[] pixels;
+        byte blueTint = 30;
 
         // Interaction
         CancellationTokenSource simCts;
@@ -49,66 +55,28 @@ namespace FluidSim
         double currentX = 1;
         bool leftToRight = true;
         bool topToBottom = false;
-        bool fullScreenMode = false;
         bool initComplete = false;
-        bool addSmokeSource = false;
+        long frame = 0;
         ValueStopwatch vsw;
+        #endregion
 
+        /// <summary>
+        /// Main constructor
+        /// </summary>
         public MainWindow()
         {
             vsw = ValueStopwatch.StartNew();
             InitializeComponent();
             //CompositionTarget.Rendering += UpdateFrame;
-            fullScreenMode = App.FullScreenMode;
-
             this.KeyDown += (s, e) =>
             {
                 if (e.Key == Key.Escape)
                 {
                     paused = true;
-                    fullScreenMode = false;
+                    simCts?.Cancel();
                     App.Current.Shutdown();
                 }
             };
-
-            if (topToBottom)
-            {
-                dt = 0.08f;
-                viscosity = 0.04f;
-                buoyancy = 2.6f;
-                diffusion = 0.0001f;
-                injectStrength = 300f;
-                temperatureDecay = 0.12f;
-            }
-            else
-            {
-                dt = 0.06f;
-                viscosity = 0.022f;
-                buoyancy = 0.1f;
-                diffusion = 0.0001f;
-                injectStrength = 300f;
-                temperatureDecay = 0.31f;
-                if (fullScreenMode)
-                {
-                    N = 40; // go easy on the CPU
-                    dt = 0.02f;
-                    viscosity = 0.011f;
-                    temperatureDecay = 0.6f;
-                    this.Topmost = true;
-                }
-            }
-        }
-
-        long frame = 0;
-        void UpdateFrame(object sender, EventArgs e)
-        {
-            if (initComplete && !paused && (++frame > 18))
-            {
-                frame = 0;
-                AddSmokeSource();
-                Step();
-                RenderToBitmap();
-            }
         }
 
         #region [Events]
@@ -144,28 +112,25 @@ namespace FluidSim
             {
                 temperatureDecay = (float)SliderDecay.Value;
             };
+            SliderColor.ValueChanged += (s, ev) =>
+            {
+                blueTint = (byte)SliderColor.Value;
+            };
             SimImage.MouseLeftButtonDown += SimImage_MouseLeftButtonDown;
             SimImage.MouseLeftButtonUp += SimImage_MouseLeftButtonUp;
             SimImage.MouseMove += SimImage_MouseMove;
             SimImage.MouseRightButtonUp += SimImage_MouseRightButtonUp;
             #endregion
 
-            SliderGrid.Value = N;
-            SliderDt.Value = dt;
-            SliderVisc.Value = viscosity;
-            SliderDiff.Value = diffusion;
-            SliderBuoy.Value = buoyancy;
-            SliderInject.Value = injectStrength;
-            SliderDecay.Value = temperatureDecay;
-
+            SetInitialParameters();
             InitSimulation();
             StartSimulationLoop();
 
-            //Create the timer for our clock text
+            //Create the timer for our instigator
             if (tmrDispatch == null)
             {
                 tmrDispatch = new DispatcherTimer();
-                tmrDispatch.Interval = TimeSpan.FromMilliseconds(40);
+                tmrDispatch.Interval = TimeSpan.FromMilliseconds(30);
                 tmrDispatch.Tick += timer_Tick;
                 tmrDispatch.Start();
             }
@@ -175,7 +140,7 @@ namespace FluidSim
                     tmrDispatch.Start();
             }
 
-            if (fullScreenMode)
+            if (App.FullScreenMode)
             {
                 // Remove the control panel and maximize
                 mainGrid.ColumnDefinitions[1].Width = new GridLength(0);
@@ -202,9 +167,13 @@ namespace FluidSim
             StatusText.Text = paused ? "Status: Paused" : "Status: Running";
         }
 
-        void BtnReset_Click(object sender, RoutedEventArgs e)
+        void BtnReset_Click(object sender, RoutedEventArgs e) => ResetSimulation();
+
+        void BtnToggle_Click(object sender, RoutedEventArgs e)
         {
-            ResetSimulation();
+            topToBottom = !topToBottom;
+            BtnToggle.Content = topToBottom ? "Top to bottom" : "Bottom to top";
+            SetInitialParameters(); // auto-pick best starting conditions on flip
         }
 
         void SimImage_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -240,9 +209,29 @@ namespace FluidSim
         {
             var current = mainGrid.ColumnDefinitions[1].Width;
             if (current.Value == 0)
-                mainGrid.ColumnDefinitions[1].Width = new GridLength(300);
+                mainGrid.ColumnDefinitions[1].Width = new GridLength(310);
             else
                 mainGrid.ColumnDefinitions[1].Width = new GridLength(0);
+        }
+
+        /// <summary>
+        /// Testing CompositionTarget rendering
+        /// </summary>
+        void UpdateFrame(object sender, EventArgs e)
+        {
+            // Only update every 16 frames
+            if (initComplete && !paused && (++frame > 16))
+            {
+                frame = 0;
+                if (addSmokeSource)
+                    AddSmokeSource();
+
+                // Revisit this since the frame rate can be too high
+                // so that Step() has not had a chance to complete.
+                Step();
+
+                RenderToBitmap();
+            }
         }
         #endregion
 
@@ -318,6 +307,49 @@ namespace FluidSim
             initComplete = true;
         }
 
+        void SetInitialParameters()
+        {
+            if (topToBottom)
+            {
+                dt = 0.08f;
+                viscosity = 0.024f;
+                buoyancy = 2.6f;
+                diffusion = 0.0001f;
+                injectStrength = 300f;
+                temperatureDecay = 0.05f;
+            }
+            else
+            {
+                dt = 0.02f;
+                viscosity = 0.018f;
+                buoyancy = 0.1f;
+                diffusion = 0.0001f;
+                injectStrength = 300f;
+                temperatureDecay = 0.31f;
+                if (App.FullScreenMode)
+                {
+                    N = 50; // go easy on the CPU
+                    dt = 0.02f;
+                    viscosity = 0.012f;
+                    temperatureDecay = 0.6f;
+                    this.Topmost = true;
+                }
+            }
+
+            // Insurance in the event that we're called under a non-UI thread.
+            mainGrid.Dispatcher.Invoke(delegate ()
+            {
+                SliderGrid.Value = (double)N;
+                SliderDt.Value = (double)dt;
+                SliderVisc.Value = (double)viscosity;
+                SliderDiff.Value = (double)diffusion;
+                SliderBuoy.Value = (double)buoyancy;
+                SliderInject.Value = (double)injectStrength;
+                SliderDecay.Value = (double)temperatureDecay;
+                SliderColor.Value = (double)blueTint;
+            });
+        }
+
         void ResetSimulation()
         {
             simCts?.Cancel();
@@ -381,7 +413,7 @@ namespace FluidSim
                         {
                             // Don't use BeginInvoke as the frame count could be
                             // reset by the time the Dispatcher renders the text.
-                            StatusText.Dispatcher.Invoke((Action)delegate ()
+                            StatusText.Dispatcher.Invoke(delegate()
                             {
                                 StatusText.Text = $"Running at {frame} frames per second";
                             });
@@ -437,7 +469,8 @@ namespace FluidSim
             float localDiff = diffusion;
             float localBuoy = buoyancy;
 
-            //vsw = ValueStopwatch.StartNew();
+            if (App.DebugMode)
+                vsw = ValueStopwatch.StartNew();
 
             // Buoyancy: add vertical force proportional to temperature and density
             for (int j = 1; j <= N; j++)
@@ -479,10 +512,13 @@ namespace FluidSim
             for (int k = 0; k < dens.Length; k++) 
                 dens[k] = Math.Max(0f, dens[k] - temperatureDecay * 0.5f * localDt * dens[k]);
 
-            //Debug.WriteLine($"[INFO] Render calc took {ToReadableTime(vsw.GetElapsedTime())}");
+            if (App.DebugMode)
+                Debug.WriteLine($"[INFO] Step calc took {vsw.GetElapsedTime().TotalMilliseconds} ms");
         }
 
-        // --- Linear solver for diffusion ---
+        /// <summary>
+        /// Linear solver for diffusion
+        /// </summary>
         void Diffuse(int b, float[] x, float[] x0, float diffCoef, float dtLocal)
         {
             float a = dtLocal * diffCoef * N * N;
@@ -621,10 +657,9 @@ namespace FluidSim
         /// </summary>
         void RenderToBitmap()
         {
-
             // We'll map each cell to a pixel in the bitmap (1:1)
             // Color mapping: temperature drives color (black -> red -> orange -> yellow -> white)
-            // density multiplies brightness.
+            // Density multiplies brightness.
             #region [if N=100 ⇒ approx 2.5 milliseconds]
             int w = bmpWidth, h = bmpHeight;
             for (int j = 0; j < N; j++) // ~2.5 milliseconds
@@ -641,8 +676,8 @@ namespace FluidSim
                     // combine temperature and density to get intensity
                     float intensity = Math.Min(1f, (tVal * 0.04f) + (dVal * 0.01f));
                     
-                    // small gamma correction
-                    intensity = (float)Math.Pow(intensity, 0.7);
+                    // apply small gamma correction
+                    intensity = (float)Math.Pow(intensity, gammaCorrection);
 
                     // Map temperature to color
                     Color col = TemperatureToColor(tVal, intensity);
@@ -663,10 +698,12 @@ namespace FluidSim
                 {
                     #region [if N=100 ⇒ approx 100 microseconds]
                     bmp.Lock();
-                    unsafe
-                    {
-                        System.Runtime.InteropServices.Marshal.Copy(pixels, 0, bmp.BackBuffer, pixels.Length);
-                    }
+                    
+                    // Marshal.Copy() is specifically designed to copy between unmanaged and managed memory
+                    // without having to drop into an unsafe block. It wraps the pointer access and performs
+                    // the appropriate pinning, bounds checks, and memory operations internally.
+                    System.Runtime.InteropServices.Marshal.Copy(pixels, 0, bmp.BackBuffer, pixels.Length);
+                    
                     bmp.AddDirtyRect(new Int32Rect(0, 0, bmpWidth, bmpHeight));
                     bmp.Unlock();
                     #endregion
@@ -682,19 +719,16 @@ namespace FluidSim
 
         Color TemperatureToColor(float tempVal, float intensity)
         {
-            byte blueTint = 30;
-
-            // tempVal scalar -> map to palette
-            // clamp & normalize
+            // tempVal scalar ⇒ map to palette clamp & normalize
             float t = Math.Max(0f, tempVal * 0.05f); // tuning
             t = Math.Min(1f, t);
 
-            // Palette interpolation: black -> red -> orange -> yellow -> white
-            // 0.0 -> black
-            // 0.25 -> dark red
-            // 0.5 -> red/orange
-            // 0.75 -> yellow
-            // 1.0 -> white
+            // Palette interpolation: black ⇒ red ⇒ orange ⇒ yellow ⇒ white
+            // 0.00 ⇒ black (after gamma correction)
+            // 0.25 ⇒ dark red
+            // 0.50 ⇒ red/orange
+            // 0.75 ⇒ yellow
+            // 1.00 ⇒ white
 
             byte a = (byte)Math.Min(255, (int)(255 * intensity));
             if (t <= 0.25f)
@@ -722,44 +756,21 @@ namespace FluidSim
                 float s = (t - 0.75f) / 0.25f;
                 byte r = 255;
                 byte g = 255;
-                byte b = (byte)(s * 255);
+                byte b = 0;
+                if (blueTint < 220)
+                    b = (byte)(s * 255);
+                else // get rid of any remaining yellow values
+                    b = blueTint;
                 return Color.FromArgb(a, (byte)(r * intensity), (byte)(g * intensity), (byte)(b * intensity));
             }
         }
         #endregion
-
-        /// <summary>
-        /// Display a readable sentence as to when the time will happen.
-        /// e.g. "in one second" or "in 2 days"
-        /// </summary>
-        /// <param name="value"><see cref="TimeSpan"/>the future time to compare from now</param>
-        /// <returns>human friendly format</returns>
-        static string ToReadableTime(TimeSpan value, bool reportMilliseconds = true)
-        {
-            double delta = value.TotalSeconds;
-            if (delta < 1 && !reportMilliseconds) { return "less than one second"; }
-            if (delta < 1 && reportMilliseconds) { return $"{value.TotalMilliseconds:N2} milliseconds"; }
-            if (delta < 60) { return value.Seconds == 1 ? "one second" : value.Seconds + " seconds"; }
-            if (delta < 120) { return "a minute"; }                  // 2 * 60
-            if (delta < 3000) { return value.Minutes + " minutes"; } // 50 * 60
-            if (delta < 5400) { return "an hour"; }                  // 90 * 60
-            if (delta < 86400) { return value.Hours + " hours"; }    // 24 * 60 * 60
-            if (delta < 172800) { return "one day"; }                // 48 * 60 * 60
-            if (delta < 2592000) { return value.Days + " days"; }    // 30 * 24 * 60 * 60
-            if (delta < 31104000)                                    // 12 * 30 * 24 * 60 * 60
-            {
-                int months = Convert.ToInt32(Math.Floor((double)value.Days / 30));
-                return months <= 1 ? "one month" : months + " months";
-            }
-            int years = Convert.ToInt32(Math.Floor((double)value.Days / 365));
-            return years <= 1 ? "one year" : years + " years";
-        }
     }
 
     #region [Original Version]
     /*
-     *  This was my original version of the fire/fluid simulation code - it renders a 
-     *  Bunsen-burner-style flame point when clicking at the bottom of the main window's edge.
+     *  This was my original version of the fire/fluid simulation code - it renders a Bunsen-burner-style 
+     *  inner flame cone and outer flame cone when clicking at the bottom of the main window's edge.
      */
 
     //public partial class MainWindow : Window
