@@ -9,6 +9,10 @@
 | ---- | ---- |
 | .NET Framework | 4.0.30319 |
 
-- This application uses only the CPU to render smoke/fire.
+- A [WPF](https://learn.microsoft.com/en-us/dotnet/desktop/wpf) application that only uses the CPU to render a smoke/fire particle matrix.
+- This can be adopted to simulate other fluids by adjusting the color and `Buoyancy`.
+- To run in fullscreen mode pass the switch `-fullscreen` on launch.
 
 ![Screenshot](./Screenshot.png)
+
+![Screenshot2](./Screenshot2.png)
