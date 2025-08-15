@@ -12,6 +12,7 @@ namespace FluidSim
     {
         static Mutex _mutex;
         public static bool FullScreenMode { get; private set; } = false;
+        public static bool TurbulenceMode { get; private set; } = false;
         public static bool DebugMode { get; private set; } = false;
 
         protected override void OnStartup(StartupEventArgs e)
@@ -23,7 +24,9 @@ namespace FluidSim
             {
                 FullScreenMode = e.Args.Any(arg => arg.EndsWith("fullscreen", StringComparison.OrdinalIgnoreCase));
                 DebugMode = e.Args.Any(arg => arg.EndsWith("debug", StringComparison.OrdinalIgnoreCase));
+                TurbulenceMode = e.Args.Any(arg => arg.EndsWith("turbulence", StringComparison.OrdinalIgnoreCase));
             }
+
             if ($"{System.Reflection.Assembly.GetExecutingAssembly().Location}".EndsWith(".scr", StringComparison.OrdinalIgnoreCase) || 
                 $"{System.Reflection.Assembly.GetEntryAssembly().Location}".EndsWith(".scr", StringComparison.OrdinalIgnoreCase))
                 FullScreenMode = true;

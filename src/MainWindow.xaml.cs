@@ -8,7 +8,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -24,11 +23,12 @@ namespace FluidSim
         float dt = 0.08f;           // timestep
         float viscosity = 0.04f;
         float diffusion = 0.0001f;
-        float buoyancy = 0.1f; // Fall from top => buoyancy=2.5f;
+        float buoyancy = 0.1f;
         float injectStrength = 300f;
         float temperatureDecay = 0.09f;
+        float turbulence = 0f;
         double gammaCorrection = 0.7d;
-        bool addSmokeSource = false;
+        bool addFixedSmokeSource = false;
 
         // Grid arrays: sized (N+2) * (N+2) to allow boundaries.
         int size; // (N+2)
@@ -42,6 +42,7 @@ namespace FluidSim
         int stride;
         byte[] pixels;
         byte blueTint = 30;
+        bool negativePalette = false;
 
         // Interaction
         CancellationTokenSource simCts;
@@ -50,7 +51,6 @@ namespace FluidSim
         Point lastMousePos;
 
         // Extras
-        readonly Random _rand = new Random();
         DispatcherTimer tmrDispatch = null;
         double currentX = 1;
         bool leftToRight = true;
@@ -112,6 +112,10 @@ namespace FluidSim
             {
                 temperatureDecay = (float)SliderDecay.Value;
             };
+            SliderTurbulence.ValueChanged += (s, ev) =>
+            {
+                turbulence = (float)SliderTurbulence.Value;
+            };
             SliderColor.ValueChanged += (s, ev) =>
             {
                 blueTint = (byte)SliderColor.Value;
@@ -121,6 +125,12 @@ namespace FluidSim
             SimImage.MouseMove += SimImage_MouseMove;
             SimImage.MouseRightButtonUp += SimImage_MouseRightButtonUp;
             #endregion
+
+            if (App.DebugMode)
+            {
+                TestPalettizedBitmap();
+                return;
+            }
 
             SetInitialParameters();
             InitSimulation();
@@ -146,6 +156,7 @@ namespace FluidSim
                 mainGrid.ColumnDefinitions[1].Width = new GridLength(0);
                 this.WindowStyle = WindowStyle.None;
                 this.WindowState = WindowState.Maximized;
+                
             }
             else
             {
@@ -153,6 +164,9 @@ namespace FluidSim
                 this.WindowStyle = WindowStyle.SingleBorderWindow;
                 this.WindowState = WindowState.Normal;
             }
+
+            if (App.TurbulenceMode)
+                SliderTurbulence.IsEnabled = false;
         }
 
         void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
@@ -172,7 +186,7 @@ namespace FluidSim
         void BtnToggle_Click(object sender, RoutedEventArgs e)
         {
             topToBottom = !topToBottom;
-            BtnToggle.Content = topToBottom ? "Top to bottom" : "Bottom to top";
+            BtnToggle.Content = topToBottom ? "Top ↕ bottom" : "Bottom ↕ top";
             SetInitialParameters(); // auto-pick best starting conditions on flip
         }
 
@@ -215,7 +229,7 @@ namespace FluidSim
         }
 
         /// <summary>
-        /// Testing CompositionTarget rendering
+        /// For testing <see cref="CompositionTarget"/> rendering
         /// </summary>
         void UpdateFrame(object sender, EventArgs e)
         {
@@ -223,7 +237,7 @@ namespace FluidSim
             if (initComplete && !paused && (++frame > 16))
             {
                 frame = 0;
-                if (addSmokeSource)
+                if (addFixedSmokeSource)
                     AddSmokeSource();
 
                 // Revisit this since the frame rate can be too high
@@ -246,12 +260,12 @@ namespace FluidSim
             if (!paused)
             {
                 if (leftToRight && currentX < (SimImage.ActualWidth - 40))
-                    currentX += _rand.Next(0, 15);
+                    currentX += Extensions.Rand.Next(0, 15);
                 else
                     leftToRight = false;
 
                 if (!leftToRight && currentX > 40)
-                    currentX -= _rand.Next(0, 15);
+                    currentX -= Extensions.Rand.Next(0, 15);
                 else
                     leftToRight = true;
 
@@ -299,7 +313,10 @@ namespace FluidSim
             bmpHeight = N;
             stride = bmpWidth * 4;
             pixels = new byte[bmpHeight * stride];
-            bmp = new WriteableBitmap(bmpWidth, bmpHeight, 96, 96, PixelFormats.Bgra32, null);
+            if (negativePalette)
+                bmp = new WriteableBitmap(bmpWidth, bmpHeight, 96, 96, PixelFormats.Cmyk32, null);
+            else
+                bmp = new WriteableBitmap(bmpWidth, bmpHeight, 96, 96, PixelFormats.Bgra32, null);
             SimImage.Source = bmp;
             SimImage.Width = ActualWidth - ControlPanel.ActualWidth; // account for control panel on the right
             SimImage.Height = ActualHeight;
@@ -325,7 +342,7 @@ namespace FluidSim
                 buoyancy = 0.1f;
                 diffusion = 0.0001f;
                 injectStrength = 300f;
-                temperatureDecay = 0.31f;
+                temperatureDecay = 0.25f;
                 if (App.FullScreenMode)
                 {
                     N = 50; // go easy on the CPU
@@ -346,6 +363,7 @@ namespace FluidSim
                 SliderBuoy.Value = (double)buoyancy;
                 SliderInject.Value = (double)injectStrength;
                 SliderDecay.Value = (double)temperatureDecay;
+                SliderTurbulence.Value = (double)turbulence;
                 SliderColor.Value = (double)blueTint;
             });
         }
@@ -379,8 +397,20 @@ namespace FluidSim
             dens[idx] += injectStrength * 0.8f;
             temp[idx] += injectStrength * 0.03f + 25f;
 
-            // add a small upward velocity
-            v[idx] -= injectStrength * 0.01f;
+            if (App.TurbulenceMode)
+            {
+                if (Extensions.Rand.Next(100) > 96) // random explosive effect
+                    v[idx] += injectStrength * ((float)Extensions.Rand.NextDouble() + 0.001f);
+                else
+                    v[idx] -= injectStrength * 0.01f; // add a small upward velocity
+            }
+            else
+            {
+                if (turbulence.IsZeroOrLess())
+                    v[idx] -= injectStrength * 0.01f; // add a small upward velocity
+                else
+                    v[idx] += injectStrength * turbulence; // explosive effect
+            }
         }
 
         void StartSimulationLoop()
@@ -396,7 +426,7 @@ namespace FluidSim
                 {
                     if (initComplete && !paused)
                     {
-                        if (addSmokeSource)
+                        if (addFixedSmokeSource)
                         {
                             // Continuous injection near bottom/top center to simulate fire source
                             AddSmokeSource();
@@ -417,7 +447,6 @@ namespace FluidSim
                             {
                                 StatusText.Text = $"Running at {frame} frames per second";
                             });
-                            //Debug.WriteLine($"[INFO] FPS ⇒ {frame}");
                             stopwatch.Restart();
                             frame = 0;
                         }
@@ -513,7 +542,7 @@ namespace FluidSim
                 dens[k] = Math.Max(0f, dens[k] - temperatureDecay * 0.5f * localDt * dens[k]);
 
             if (App.DebugMode)
-                Debug.WriteLine($"[INFO] Step calc took {vsw.GetElapsedTime().TotalMilliseconds} ms");
+                Debug.WriteLine($"[INFO] Step calc took {vsw.GetElapsedTime().ToReadableTime()}");
         }
 
         /// <summary>
@@ -763,6 +792,142 @@ namespace FluidSim
                     b = blueTint;
                 return Color.FromArgb(a, (byte)(r * intensity), (byte)(g * intensity), (byte)(b * intensity));
             }
+        }
+        #endregion
+
+        #region [Extras]
+        /// <summary>
+        /// <see cref="BitmapPalette"/> is only supported with <see cref="PixelFormats.Indexed1"/>, <see cref="PixelFormats.Indexed2"/>, <see cref="PixelFormats.Indexed4"/> and <see cref="PixelFormats.Indexed8"/>.
+        /// <see cref="BitmapPalette"/> is not supported with palettes: Bgr24, Bgr32, Bgra32, etc.
+        /// </summary>
+        void TestPalettizedBitmap(int width = 1024, int height = 1024, bool horizontalPattern = false, bool useGamma = true)
+        {
+            PixelFormat format = PixelFormats.Indexed8; // 8-bit color depth max (256 colors)
+
+            #region [Palette]
+            // ⇒ Custom 256-color grayscale palette (or use BitmapPalettes.Gray256)
+            var grayColors = Enumerable.Range(0, 256).Select(i => Color.FromRgb((byte)i, (byte)i, (byte)i)).ToList();
+            var redColors = Enumerable.Range(0, 256).Select(i => Color.FromRgb((byte)i, 1, 1)).ToList();
+            var greenColors = Enumerable.Range(0, 256).Select(i => Color.FromRgb(1, (byte)i, 1)).ToList();
+            var blueColors = Enumerable.Range(0, 256).Select(i => Color.FromRgb(1, 1, (byte)i)).ToList();
+            var palette = new BitmapPalette(blueColors);
+            
+            // ⇒ Or use presets
+            //palette = BitmapPalettes.Gray256;
+
+            // ⇒ Or use specific colors
+            //palette = new BitmapPalette(new List<Color>
+            //{
+            //    Colors.Black, Colors.Red, Colors.Orange,
+            //    Colors.Yellow, Colors.White, Colors.Purple,
+            //    Colors.Blue, Colors.Green, Colors.Brown,
+            //    Colors.Cyan, Colors.Magenta, Colors.Gray,
+            //});
+            #endregion
+
+            // Create an Indexed8 WriteableBitmap with the custom palette
+            var wb = new WriteableBitmap(width, height, 96, 96, format, palette);
+
+            #region [Write indices]
+            // Stride for Indexed8: width bytes per row
+            int stride = (width * wb.Format.BitsPerPixel + 7) / 8; // generic stride calc = 256
+            int paletteSize = wb.Palette.Colors.Count;
+            byte[] pixels = new byte[stride * height];
+
+            if (useGamma)
+            {
+                const double gamma = 1.5;
+                if (horizontalPattern)
+                {
+                    for (int y = 0; y < height; y++)
+                    {
+                        int row = y * stride;
+
+                        for (int x = 0; x < width; x++)
+                        {
+                            // Normalized horizontal position 0..1
+                            double t = (double)x / (width - 1);
+                            // Convert to linear light space
+                            double linear = Math.Pow(t, gamma);
+                            // Convert back to sRGB space
+                            double corrected = Math.Pow(linear, gamma);
+                            // Map to palette index range
+                            byte paletteIndex = (byte)(corrected * (paletteSize - 1));
+                            pixels[row + x] = paletteIndex;
+                        }
+                    }
+                }
+                else
+                {
+                    for (int y = 0; y < height; y++)
+                    {
+                        int row = y * stride;
+                        // Normalized position 0..1, top to bottom
+                        double t = (double)y / (height - 1);
+                        // Apply gamma correction
+                        double linear = Math.Pow(t, gamma); // sRGB → linear light
+                        double corrected = Math.Pow(linear, gamma); // linear → sRGB
+                                                                    // Map to palette index range
+                        byte paletteIndex = (byte)(corrected * (paletteSize - 1));
+                        for (int x = 0; x < width; x++)
+                        {
+                            pixels[row + x] = paletteIndex;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                if (horizontalPattern) // Horizontal gradient across the width
+                {
+                    for (int y = 0; y < height; y++)
+                    {
+                        int row = y * stride;
+                        for (int x = 0; x < width; x++)
+                        {
+                            byte paletteIndex = (byte)(x * (paletteSize - 1) / (width - 1));
+                            pixels[row + x] = paletteIndex;
+                        }
+                    }
+                }
+                else // Vertical gradient across the height
+                {
+                    for (int y = 0; y < height; y++)
+                    {
+                        int row = y * stride;
+                        // Scale y into 0–255 range (handle palettes greater than 256)
+                        byte paletteIndex = (byte)(y * 255 / (height - 1));
+                
+                        for (int x = 0; x < width; x++)
+                        {
+                            pixels[row + x] = paletteIndex;
+                        }
+                    }
+                }
+            }
+
+            Dispatcher.Invoke(() =>
+                {
+                    try
+                    {
+                        // Load the indices into the bitmap
+                        wb.WritePixels(new Int32Rect(0, 0, width, height), pixels, stride, 0);
+                        // Update the image control
+                        SimImage.Source = wb;
+                        // Save the result to disk
+                        wb.SaveWriteableBitmap($"Indexed{format.BitsPerPixel}_{(horizontalPattern ? "Horizontal" : "Vertical")}.png");
+                    }
+                    catch { }
+                });
+            #endregion
+        }
+
+        WriteableBitmap RecolorIndexed8(byte[] indices, int width, int height, BitmapPalette newPalette)
+        {
+            var wb2 = new WriteableBitmap(width, height, 96, 96, PixelFormats.Indexed8, newPalette);
+            int stride = (width * wb2.Format.BitsPerPixel + 7) / 8;
+            wb2.WritePixels(new Int32Rect(0, 0, width, height), indices, stride, 0);
+            return wb2;
         }
         #endregion
     }

@@ -6,8 +6,8 @@
     xmlns:local="clr-namespace:FluidSim"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     Title="FluidSim"
-    Width="890"
-    Height="640"
+    Width="955"
+    Height="690"
     Background="#141414"
     Closing="Window_Closing"
     Icon="/FluidSim;component/AppIcon.ico"
@@ -41,7 +41,7 @@
 
         <Border
             Grid.Column="0"
-            Margin="-20,-30,-10,-30"
+            Margin="-10,-30,-10,-30"
             Background="Black"
             BorderBrush="DodgerBlue"
             BorderThickness="0">
@@ -178,7 +178,7 @@
             <Slider
                 x:Name="SliderInject"
                 Margin="6"
-                Maximum="500"
+                Maximum="600"
                 Minimum="10"
                 ToolTip="how much force is applied during additions"
                 Value="300" />
@@ -200,6 +200,24 @@
                 TickFrequency="0.01"
                 ToolTip="cooling rate of the particles"
                 Value="0.09" />
+
+            <StackPanel Margin="6,4,6,0" Orientation="Horizontal">
+                <TextBlock Foreground="White">Turbulence</TextBlock>
+                <TextBlock
+                    Margin="10,0,0,0"
+                    VerticalAlignment="Bottom"
+                    FontSize="12"
+                    Foreground="White"
+                    Text="{Binding ElementName=SliderTurbulence, Path=Value, StringFormat=F3}" />
+            </StackPanel>
+            <Slider
+                x:Name="SliderTurbulence"
+                Margin="6"
+                Maximum="0.5"
+                Minimum="0.0"
+                TickFrequency="0.001"
+                ToolTip="adds turbulence to velocity vector"
+                Value="0.0" />
 
             <StackPanel Margin="6,4,6,0" Orientation="Horizontal">
                 <TextBlock Foreground="White">Blue Value</TextBlock>
@@ -239,7 +257,7 @@
                     Width="110"
                     Margin="0,6,2,6"
                     Click="BtnToggle_Click"
-                    Content="Bottom to top"
+                    Content="Bottom ↕ top"
                     Template="{StaticResource ReformedButton}" />
             </StackPanel>
 
