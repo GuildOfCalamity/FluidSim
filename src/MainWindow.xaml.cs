@@ -58,6 +58,8 @@ namespace FluidSim
         bool initComplete = false;
         long frame = 0;
         ValueStopwatch vsw;
+        bool frameSaving = false; // triggered when pause button is clicked
+        List<WriteableBitmap> frameBuffer = new List<WriteableBitmap>();
         #endregion
 
         /// <summary>
@@ -179,6 +181,17 @@ namespace FluidSim
             paused = !paused;
             BtnPause.Content = paused ? "Resume" : "Pause";
             StatusText.Text = paused ? "Status: Paused" : "Status: Running";
+            if (frameBuffer.Count > 0)
+            {
+                int counter = 0;
+                foreach (var f in frameBuffer)
+                {
+                    counter++;
+                    Debug.WriteLine($"Frame{counter:D3}.png");
+                    f.SaveWriteableBitmap($"Frame{counter:D3}.png");
+                }
+                frameBuffer.Clear();
+            }
         }
 
         void BtnReset_Click(object sender, RoutedEventArgs e) => ResetSimulation();
@@ -431,24 +444,34 @@ namespace FluidSim
                             // Continuous injection near bottom/top center to simulate fire source
                             AddSmokeSource();
                         }
-                        
+
                         // Step the simulation
                         Step();
-                        
+
                         // Render the current state to bitmap
                         RenderToBitmap();
-                        
+
                         frame++;
                         if (stopwatch.ElapsedMilliseconds >= 1000)
                         {
                             // Don't use BeginInvoke as the frame count could be
                             // reset by the time the Dispatcher renders the text.
-                            StatusText.Dispatcher.Invoke(delegate()
+                            StatusText.Dispatcher.Invoke(delegate ()
                             {
                                 StatusText.Text = $"Running at {frame} frames per second";
                             });
                             stopwatch.Restart();
                             frame = 0;
+                        }
+
+                        if (frameSaving)
+                        {
+                            // Save every other frame to disk
+                            SimImage.Dispatcher.Invoke(delegate ()
+                            {
+                                if (frame % 2 == 0)
+                                    frameBuffer.Add(bmp.Clone()); // must clone to avoid reference issues
+                            });
                         }
                     }
 

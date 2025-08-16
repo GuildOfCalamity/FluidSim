@@ -885,64 +885,74 @@ namespace FluidSim
 
         public static void SaveWriteableBitmap(this WriteableBitmap wb, string filePath)
         {
-            var encoder = new PngBitmapEncoder(); // Or JpegBitmapEncoder, BmpBitmapEncoder, etc.
-            encoder.Frames.Add(BitmapFrame.Create(wb)); // Just one frame, the bitmap itself.
-            using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write))
+            if (wb == null)
+                return;
+
+            try
             {
-                encoder.Save(stream);
+                var encoder = new PngBitmapEncoder(); // Or JpegBitmapEncoder, BmpBitmapEncoder, etc.
+                encoder.Frames.Add(BitmapFrame.Create(wb)); // Just one frame, the bitmap itself.
+                using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write))
+                {
+                    encoder.Save(stream);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ERROR] SaveWriteableBitmap: {ex.Message}");
             }
         }
-    }
-
-    /// <summary>
-    /// Defines a color in Hue/Saturation/Value (HSV) space.
-    /// </summary>
-    public struct HsvColor
-    {
-        /// <summary>
-        /// The Hue in 0..360 range.
-        /// </summary>
-        public double H;
 
         /// <summary>
-        /// The Saturation in 0..1 range.
+        /// Defines a color in Hue/Saturation/Value (HSV) space.
         /// </summary>
-        public double S;
+        public struct HsvColor
+        {
+            /// <summary>
+            /// The Hue in 0..360 range.
+            /// </summary>
+            public double H;
+
+            /// <summary>
+            /// The Saturation in 0..1 range.
+            /// </summary>
+            public double S;
+
+            /// <summary>
+            /// The Value in 0..1 range.
+            /// </summary>
+            public double V;
+
+            /// <summary>
+            /// The Alpha/opacity in 0..1 range.
+            /// </summary>
+            public double A;
+        }
 
         /// <summary>
-        /// The Value in 0..1 range.
+        /// Defines a color in Hue/Saturation/Lightness (HSL) space.
         /// </summary>
-        public double V;
+        public struct HslColor
+        {
+            /// <summary>
+            /// The Hue in 0..360 range.
+            /// </summary>
+            public double H;
 
-        /// <summary>
-        /// The Alpha/opacity in 0..1 range.
-        /// </summary>
-        public double A;
-    }
+            /// <summary>
+            /// The Saturation in 0..1 range.
+            /// </summary>
+            public double S;
 
-    /// <summary>
-    /// Defines a color in Hue/Saturation/Lightness (HSL) space.
-    /// </summary>
-    public struct HslColor
-    {
-        /// <summary>
-        /// The Hue in 0..360 range.
-        /// </summary>
-        public double H;
+            /// <summary>
+            /// The Lightness in 0..1 range.
+            /// </summary>
+            public double L;
 
-        /// <summary>
-        /// The Saturation in 0..1 range.
-        /// </summary>
-        public double S;
-
-        /// <summary>
-        /// The Lightness in 0..1 range.
-        /// </summary>
-        public double L;
-
-        /// <summary>
-        /// The Alpha/opacity in 0..1 range.
-        /// </summary>
-        public double A;
+            /// <summary>
+            /// The Alpha/opacity in 0..1 range.
+            /// </summary>
+            public double A;
+        }
     }
 }
