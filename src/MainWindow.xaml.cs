@@ -58,7 +58,6 @@ namespace FluidSim
         bool initComplete = false;
         long frame = 0;
         ValueStopwatch vsw;
-        bool frameSaving = false; // triggered when pause button is clicked
         List<WriteableBitmap> frameBuffer = new List<WriteableBitmap>();
         #endregion
 
@@ -464,12 +463,12 @@ namespace FluidSim
                             frame = 0;
                         }
 
-                        if (frameSaving)
+                        if (App.FrameSaveMode)
                         {
                             // Save every other frame to disk
                             SimImage.Dispatcher.Invoke(delegate ()
                             {
-                                if (frame % 2 == 0)
+                                if (frame % 2 == 0 && frameBuffer.Count < 1001)
                                     frameBuffer.Add(bmp.Clone()); // must clone to avoid reference issues
                             });
                         }
