@@ -13,7 +13,7 @@
 - This can be adopted to simulate other fluids by adjusting the color and `Buoyancy`.
 - To run in fullscreen mode pass the switch `-fullscreen` on launch.
 
-![Demo](./Demo.gif)
+![Demo](./Demo.gif) ![Demo2](./Demo2.gif)
 
 ![Screenshot](./Screenshot.png)
 
